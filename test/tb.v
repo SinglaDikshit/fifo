@@ -1,49 +1,139 @@
-`default_nettype none
-`timescale 1ns / 1ps
-
-/* This testbench just instantiates the module and makes some convenient wires
-   that can be driven / tested by the cocotb test.py.
-*/
-module tb ();
-
-  // Dump the signals to a VCD file. You can view it with gtkwave or surfer.
-  initial begin
-    $dumpfile("tb.vcd");
-    $dumpvars(0, tb);
-    #1;
-  end
-
-  // Wire up the inputs and outputs:
-  reg clk;
-  reg rst_n;
-  reg ena;
-  reg [7:0] ui_in;
-  reg [7:0] uio_in;
-  wire [7:0] uo_out;
-  wire [7:0] uio_out;
-  wire [7:0] uio_oe;
-`ifdef GL_TEST
-  wire VPWR = 1'b1;
-  wire VGND = 1'b0;
-`endif
-
-  // Replace tt_um_example with your module name:
-  tt_um_example user_project (
-
-      // Include power ports for the Gate Level test:
-`ifdef GL_TEST
-      .VPWR(VPWR),
-      .VGND(VGND),
-`endif
-
-      .ui_in  (ui_in),    // Dedicated inputs
-      .uo_out (uo_out),   // Dedicated outputs
-      .uio_in (uio_in),   // IOs: Input path
-      .uio_out(uio_out),  // IOs: Output path
-      .uio_oe (uio_oe),   // IOs: Enable path (active high: 0=input, 1=output)
-      .ena    (ena),      // enable - goes high when design is selected
-      .clk    (clk),      // clock
-      .rst_n  (rst_n)     // not reset
-  );
-
-endmodule
+// 1. The timescale directive  
+ `timescale     10 ps/ 10 ps  
+// fpga4student.com: FPga projects, Verilog projects, VHDL projects
+// Verilog project: Verilog code for FIFO memory
+// Verilog Testbench code for FIFO memory 
+ // 2. Preprocessor Directives  
+ `define          DELAY 10  
+ // 3. Include Statements  
+ //`include     "counter_define.h"  
+ module     tb_fifo_32;  
+ // 4. Parameter definitions  
+ parameter     ENDTIME      = 40000;  
+ // 5. DUT Input regs  
+ reg     clk;  
+ reg     rst_n;  
+ reg     wr;  
+ reg     rd;  
+ reg     [7:0] data_in;  
+ // 6. DUT Output wires  
+ wire     [7:0] data_out;  
+ wire     fifo_empty;  
+ wire     fifo_full;  
+ wire     fifo_threshold;  
+ wire     fifo_overflow;  
+ wire     fifo_underflow;  
+ integer i;  
+ // 7. DUT Instantiation
+// fpga4student.com: FPga projects, Verilog projects, VHDL projects  
+ fifo tb (/*AUTOARG*/  
+   // Outputs  
+   data_out, fifo_full, fifo_empty, fifo_threshold, fifo_overflow,   
+   fifo_underflow,   
+   // Inputs  
+   clk, rst_n, wr, rd, data_in  
+   );  
+ // 8. Initial Conditions  
+ initial  
+      begin  
+           clk     = 1'b0;  
+           rst_n     = 1'b0;  
+           wr     = 1'b0;  
+           rd     = 1'b0;  
+           data_in     = 8'd0;  
+      end  
+ // 9. Generating Test Vectors  
+ initial  
+      begin  
+           main;  
+      end  
+ task main;  
+      fork  
+           clock_generator;  
+           reset_generator;  
+           operation_process;  
+           debug_fifo;  
+           endsimulation;  
+      join  
+ endtask  
+ task clock_generator;  
+      begin  
+           forever #`DELAY clk = !clk;  
+      end  
+ endtask  
+ task reset_generator;  
+      begin  
+           #(`DELAY*2)  
+           rst_n = 1'b1;  
+           # 7.9  
+           rst_n = 1'b0;  
+           # 7.09  
+           rst_n = 1'b1;  
+      end  
+ endtask  
+ task operation_process;  
+      begin  
+           for (i = 0; i < 17; i = i + 1) begin: WRE  
+                #(`DELAY*5)  
+                wr = 1'b1;  
+                data_in = data_in + 8'd1;  
+                #(`DELAY*2)  
+                wr = 1'b0;  
+           end  
+           #(`DELAY)  
+           for (i = 0; i < 17; i = i + 1) begin: RDE  
+                #(`DELAY*2)  
+                rd = 1'b1;  
+                #(`DELAY*2)  
+                rd = 1'b0;  
+           end  
+      end  
+ endtask  
+ // 10. Debug fifo  
+ task debug_fifo;  
+      begin  
+           $display("----------------------------------------------");  
+           $display("------------------   -----------------------");  
+           $display("----------- SIMULATION RESULT ----------------");  
+           $display("--------------       -------------------");  
+           $display("----------------     ---------------------");  
+           $display("----------------------------------------------");  
+           $monitor("TIME = %d, wr = %b, rd = %b, data_in = %h",$time, wr, rd, data_in);  
+      end  
+ endtask  
+ // 11. Self-Checking  
+ reg [5:0] waddr, raddr;  
+ reg [7:0] mem[64:0];  
+ always @ (posedge clk) begin  
+      if (~rst_n) begin  
+           waddr     <= 6'd0;  
+      end  
+      else if (wr) begin  
+           mem[waddr] <= data_in;  
+           waddr <= waddr + 1;  
+      end  
+      $display("TIME = %d, data_out = %d, mem = %d",$time, data_out,mem[raddr]);  
+      if (~rst_n) raddr     <= 6'd0;  
+      else if (rd & (~fifo_empty)) raddr <= raddr + 1;  
+      if (rd & (~fifo_empty)) begin  
+           if (mem[raddr]  
+            == data_out) begin  
+                $display("=== PASS ===== PASS ==== PASS ==== PASS ===");  
+                if (raddr == 16) $finish;  
+           end  
+           else begin  
+                $display ("=== FAIL ==== FAIL ==== FAIL ==== FAIL ===");  
+                $display("-------------- THE SIMUALTION FINISHED ------------");  
+                $finish;  
+           end  
+      end  
+ end  
+ //12. Determines the simulation limit  
+ task endsimulation;  
+      begin  
+           #ENDTIME  
+           $display("-------------- THE SIMUALTION FINISHED ------------");  
+           $finish;  
+      end  
+ endtask  
+ endmodule  
